@@ -46,11 +46,14 @@ PATTERNS: list[tuple[str, object, str]] = [
     (r"\bMOSQUITO", "Mosquito", "Glasflügel"),
     (r"\bKESTREL", "Kestrel", "Glasflügel"),
     (rf"\b(GLASFL\S*{S}|H{S})?604\b", "Glasflügel 604", "Glasflügel"),
-    (rf"\b304{S}(S|CZ|C|ES|MS)\b|\bGLASFL\S*{S}304|\bH{S}304", "Glasflügel 304", "HpH"),
     (r"\bTWIN\s*SHARK", "Twin Shark", "HpH"),
-    (r"\bSHARK", "Shark", "HpH"),
+    # HpH 304 S / MS / eS = "Shark"; 304 C / CZ und das alte Glasfluegel 304 bleiben "Glasflügel 304"
+    (rf"SHARK|\b304{S}(S|MS|ES)\b|HPH{S}304{S}(S|MS|ES)\b", "Shark", "HpH"),
+    (rf"\b304{S}(CZ|C)\b|\bGLASFL\S*{S}304|\bH{S}304|\bHPH{S}304", "Glasflügel 304", "HpH/Glasflügel"),
     # --- Grob ---
-    (rf"\bTWIN{S}(ASTIR|III|3)\b|\bG{S}103", "Twin Astir", "Grob"),
+    (rf"\bTWIN{S}(III|3)\b|\bG{S}103{S}C\b", "Twin III", "Grob"),
+    (rf"\bTWIN{S}(II|2)\b|\bTWIN{S}ACRO|\bG{S}103{S}A\b", "Twin II", "Grob"),
+    (rf"\bTWIN{S}ASTIR|\bTWIN{S}(I|1)\b|\bG{S}103", "Twin Astir", "Grob"),
     (rf"\bASTIR|\bG{S}102", "Astir", "Grob"),
     (rf"\bG{S}109", "Grob G 109", "Grob"),
     # --- SZD / PZL ---
@@ -112,13 +115,151 @@ PATTERNS: list[tuple[str, object, str]] = [
 _COMPILED = [(re.compile(p, re.I), name, maker) for p, name, maker in PATTERNS]
 
 
-def detect_muster(*texts: str | None) -> tuple[str | None, str | None]:
-    """Liefert (Muster, Hersteller). Texte werden in der gegebenen Reihenfolge geprueft."""
+def _match(*texts: str | None):
+    """(Muster-Familie, Hersteller, Text direkt hinter dem Treffer)"""
     for text in texts:
         if not text:
             continue
         for rx, name, maker in _COMPILED:
             m = rx.search(text)
             if m:
-                return (name(m) if callable(name) else name), maker
-    return None, None
+                return (name(m) if callable(name) else name), maker, text[m.end():m.end() + 20]
+    return None, None, ""
+
+
+def detect_muster(*texts: str | None) -> tuple[str | None, str | None]:
+    """Liefert (Muster-Familie, Hersteller) ohne Antriebs-Unterscheidung."""
+    name, maker, _ = _match(*texts)
+    return name, maker
+
+
+# ---------------------------------------------------------------------------
+# Antrieb: Segelflugzeug / Turbo / Eigenstarter
+# ---------------------------------------------------------------------------
+SEGLER, TURBO, EIGEN = "Segelflugzeug", "Turbo", "Eigenstarter"
+
+# Muster, die es als Segelflugzeug UND mit Motor gibt -> werden als eigene Muster getrennt,
+# z. B. "Ventus 2", "Ventus 2 (Turbo)", "Ventus 2 (Eigenstarter)"
+MOTOR_FAMILIES = {
+    "Ventus", "Ventus 2", "Ventus 3", "Discus", "Discus 2", "Duo Discus", "Nimbus", "Nimbus 2", "Nimbus 3",
+    "Nimbus 4", "Janus", "Arcus", "Quintus",
+    "ASW 20", "ASW 22", "ASW 24", "ASW 27", "ASW 28", "ASG 29", "ASG 32", "ASH 25", "ASH 26", "ASH 30",
+    "ASH 31", "ASK 21", "AS 33", "AS 34",
+    "DG-500", "DG-600", "DG-800", "DG-1000", "LS 8", "LS 10", "JS1", "JS3", "Antares", "Shark",
+    "Glasflügel 304", "Twin III", "Apis", "Silent", "LAK-17", "LAK-19", "LAK-20", "EB 28", "EB 29",
+}
+# Muster, die es nur mit Motor gibt -> Name bleibt, Antrieb = Eigenstarter
+ALWAYS_SELF_LAUNCH = {"DG-400", "Stemme S10", "Stemme S12", "SF 25", "Grob G 109", "Dimona", "Taurus",
+                      "RF 5", "Ximango", "Taifun", "Carat"}
+# Schleicher: "E" heisst je nach Muster Turbo (ASG 29 E) oder Eigenstarter (ASW 22 BE)
+SCHLEICHER_E_TURBO = {"ASW 27", "ASW 28", "ASG 29"}
+
+_GLIDER_KW = re.compile(r"ohne\s+(motor|turbo|triebwerk|antrieb)|without\s+(engine|motor|turbo)|no\s+engine"
+                        r"|motor\s+(ausgebaut|entfernt|removed)|pure\s+glider|reiner\s+segler", re.I)
+_SELF_KW = re.compile(r"eigenstart|self[\s-]?launch|selbststart|\bSL\b", re.I)
+_TURBO_KW = re.compile(r"\bturbo\b|heimkehrhilfe|sustainer|\bFES\b|\bRES\b|\bTJ\b|\bjet\b", re.I)
+
+
+def _from_title(title: str) -> str | None:
+    if not title:
+        return None
+    if _GLIDER_KW.search(title):
+        return SEGLER
+    s, t = bool(_SELF_KW.search(title)), bool(_TURBO_KW.search(title))
+    if s and not t:
+        return EIGEN
+    if t and not s:
+        return TURBO
+    return None
+
+
+_STOPWORDS = {"MIT", "NOT", "SET", "HAT", "IST", "GUT", "BIT", "ART", "OPT", "FIT", "GOT", "PUT", "CUT", "LOT",
+              "NET", "SAT", "ACT", "ALT", "HOT", "OUT", "BUT", "IT", "ZUM", "IM", "AM", "UM", "VOM", "ROM", "DEM",
+              "DOM", "SUM", "HAM", "RUM", "JAM", "DAM", "HIM", "AUS", "UND", "AND", "FOR", "THE", "VON", "BEI",
+              "NEW", "NEU", "TO", "IN", "AN", "AB", "BIS", "PER", "PRO", "ZU", "DER", "DIE", "DAS"}
+
+
+def _from_suffix(family: str, rest: str) -> str | None:
+    """Wertet den Musterzusatz direkt hinter dem Namen aus: 'cxT', 'DM', 'Mi', 'BE', '-18E', 'TJ' ..."""
+    m = re.match(r"^[\s\-/]*(\d{2,3})?[\s\-]*([A-Za-z]{1,3})\b", rest or "")
+    if not m:
+        return None
+    digits, tok = m.group(1), m.group(2).upper()
+    if digits and tok == "M":  # "18m" = Spannweite
+        return None
+    if tok in _STOPWORDS:  # normale Woerter wie "mit", "not", "im" sind kein Musterzusatz
+        return None
+    if tok in ("FES", "RES", "TJ", "JET", "ES", "EL"):
+        return TURBO
+    if family.startswith("AS"):  # Schleicher
+        if "MI" in tok or tok in ("M", "ME", "TOP"):
+            return EIGEN
+        if tok.endswith("E"):
+            return TURBO if family in SCHLEICHER_E_TURBO else EIGEN
+        return None
+    if family == "DG-800":
+        return EIGEN if tok in ("A", "B", "C", "M", "MB") else None
+    if family in ("Antares", "Arcus", "Apis", "Silent") and tok in ("E", "M"):
+        return EIGEN  # elektrische / Verbrenner-Eigenstarter
+    if tok in ("MS", "SL"):
+        return EIGEN
+    if family.startswith("LS") and tok == "E":
+        return TURBO  # LS 8-e neo (FES)
+    if tok.endswith("T"):
+        return TURBO  # Ventus cT, 2cxT, Discus bT, DG-1000T, LS 8-t, Nimbus 3DT ...
+    if tok.endswith("M"):
+        return EIGEN  # Ventus 2cM, Nimbus 4DM, Janus CM, DG-1000M, DG-500M ...
+    return None
+
+
+def _from_fields(details: dict) -> str | None:
+    d = details or {}
+    # segelflug.de: Mehrfachauswahl, z. B. "Eigenstarter, Verbrenner" oder "ohne"
+    mot = d.get("Motorisierung")
+    if mot:
+        parts = {p.strip().lower() for p in mot.split(",")}
+        has_e = "eigenstarter" in parts
+        has_t = bool(parts & {"turbo", "jet", "fes", "res"})
+        has_o = "ohne" in parts
+        if has_e + has_t + has_o == 1:
+            return EIGEN if has_e else TURBO if has_t else SEGLER
+    # soaringmarket.eu
+    an = (d.get("Antrieb") or "").lower()
+    if an:
+        if "eigenstart" in an:
+            return EIGEN
+        if "turbo" in an or "heimkehr" in an:
+            return TURBO
+        if "ohne" in an:
+            return SEGLER
+    # flugzeugmarkt.de: Motor-Feld + Flugzeugtyp
+    if "Motor" in d or "Flugzeugtyp" in d:
+        motor = (d.get("Motor") or "-").strip()
+        typ = (d.get("Flugzeugtyp") or "").lower()
+        if motor in ("-", ""):
+            return EIGEN if "motorsegler" in typ else SEGLER
+        if re.search(r"\bTJ|jet|solo\s*2350", motor, re.I):
+            return TURBO
+        return EIGEN
+    return None
+
+
+def classify(title: str | None, hint: str | None = None, details: dict | None = None) -> tuple[str | None, str | None, str]:
+    """Liefert (Muster, Hersteller, Antrieb). Motorvarianten bekommen einen Zusatz im Musternamen."""
+    family, maker, rest = _match(title, hint)
+    antrieb = _from_title(title or "")
+    if antrieb is None and family in MOTOR_FAMILIES:
+        antrieb = _from_suffix(family, rest)
+        if antrieb is None and hint and hint != title:
+            f2, _, rest2 = _match(hint)
+            if f2 == family:
+                antrieb = _from_suffix(family, rest2)
+    if antrieb is None:
+        antrieb = _from_fields(details or {})
+    if family in ALWAYS_SELF_LAUNCH:
+        antrieb = EIGEN
+    antrieb = antrieb or SEGLER
+    name = family
+    if family in MOTOR_FAMILIES and antrieb != SEGLER:
+        name = f"{family} ({antrieb})"
+    return name, maker, antrieb

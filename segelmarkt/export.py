@@ -23,7 +23,7 @@ def export(con=None) -> None:
                    if not k.startswith("_") and "einloggen" not in str(v).lower()}
         listings.append({
             "id": r["id"], "s": r["source"], "u": r["url"], "t": r["title"], "k": r["kind"],
-            "m": r["muster"], "h": r["hersteller"], "p": r["price"], "c": r["currency"], "pe": r["price_eur"],
+            "m": r["muster"], "an": r["antrieb"], "h": r["hersteller"], "p": r["price"], "c": r["currency"], "pe": r["price_eur"],
             "pt": r["price_text"], "y": r["year"], "hr": r["hours"], "l": r["location"], "img": r["image"],
             "d": r["description"] or r["snippet"], "det": details, "pub": r["published"],
             "fs": r["first_seen"], "ls": r["last_seen"], "rm": r["removed_at"], "a": r["active"],

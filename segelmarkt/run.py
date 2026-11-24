@@ -13,7 +13,7 @@ import traceback
 
 from . import alarm, db, notify
 from .export import export
-from .muster import detect_muster
+from .muster import classify as classify_muster
 from .sources import flugzeugmarkt, segelflug, soaringmarket
 from .util import Http, clean, load_config, now_iso, price_eur
 
@@ -23,13 +23,19 @@ SOURCES = [segelflug, flugzeugmarkt, soaringmarket]
 SILENT = 9
 
 
+def muster_of(title, hint, details) -> tuple:
+    muster, maker, antrieb = classify_muster(title, hint, details)
+    if not muster and hint:
+        muster = clean(hint)[:40]
+    return muster, maker, antrieb
+
+
 def classify(item: dict) -> None:
     details = item.get("details") or {}
     hint = item.get("muster_hint") or details.get("_muster_hint")
-    muster, maker = detect_muster(item.get("title"), hint)
-    if not muster and hint:
-        muster = clean(hint)[:40]
+    muster, maker, antrieb = muster_of(item.get("title"), hint, details)
     item["muster"] = muster
+    item["antrieb"] = antrieb
     item["hersteller"] = item.get("hersteller_hint") or details.get("Hersteller") or maker
     item["price_eur"] = price_eur(item.get("price"), item.get("currency") or "EUR")
 
@@ -140,7 +146,7 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
                 classify(full)
                 hits = alarm.check(full, terms)
                 for k in ("title", "description", "details", "published", "location", "year", "hours",
-                          "muster", "hersteller", "detail_fetched"):
+                          "muster", "antrieb", "hersteller", "detail_fetched"):
                     upd[k] = full.get(k)
                 upd["alarm"] = int(bool(hits))
                 upd["alarm_terms"] = ", ".join(hits) or None
@@ -173,13 +179,11 @@ def reclassify_all(con, terms: list[str]) -> None:
     oder der Alarm-Begriffe). Verschickt keine Nachrichten."""
     for r in con.execute("SELECT id, title, snippet, description, details FROM listings").fetchall():
         details = json.loads(r["details"] or "{}")
-        muster, _ = detect_muster(r["title"], details.get("_muster_hint"))
-        if not muster and details.get("_muster_hint"):
-            muster = clean(details["_muster_hint"])[:40]
+        muster, _, antrieb = muster_of(r["title"], details.get("_muster_hint"), details)
         hits = alarm.check({"title": r["title"], "snippet": r["snippet"], "description": r["description"],
                             "condition": details.get("_zustand")}, terms)
-        con.execute("UPDATE listings SET muster = ?, alarm = ?, alarm_terms = ? WHERE id = ?",
-                    (muster, int(bool(hits)), ", ".join(hits) or None, r["id"]))
+        con.execute("UPDATE listings SET muster = ?, antrieb = ?, alarm = ?, alarm_terms = ? WHERE id = ?",
+                    (muster, antrieb, int(bool(hits)), ", ".join(hits) or None, r["id"]))
     con.commit()
 
 

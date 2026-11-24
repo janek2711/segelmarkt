@@ -84,6 +84,12 @@ python -m segelmarkt.run               # mit Push (NTFY_TOPIC als Umgebungsvaria
 
 Die Muster stehen in `segelmarkt/muster.py`. Varianten werden zur Musterfamilie zusammengefasst
 („DG 400/17“, „DG-400 15/17m“ → `DG-400`). Ein fehlendes Muster kannst du in `PATTERNS` ergänzen.
+
+**Motorvarianten** werden als eigene Muster geführt: Segelflugzeug, Turbo und Eigenstarter, z. B.
+`Ventus 2`, `Ventus 2 (Turbo)` und `Ventus 2 (Eigenstarter)`. Erkannt wird der Antrieb aus dem Titel
+(„Turbo“, „FES“, „Eigenstarter“, „ohne Motor“ …), aus dem Musterzusatz („2cxT“, „4DM“, „ASH 25 Mi“, „ASG 29 E“, „DG-1000T“ …)
+und aus den Antriebs-Angaben der Plattformen. Welche Muster so getrennt werden, steht in `MOTOR_FAMILIES`.
+Twin Astir, Twin II und Twin III sind eigene Muster. Im Dashboard gibt es dafür zusätzlich den Filter „Antrieb“.
 Beim nächsten Lauf werden alle gespeicherten Inserate neu zugeordnet.
 
 ## Hinweise

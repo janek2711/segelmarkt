@@ -78,7 +78,7 @@ g.l:hover .seg, g.l.on .seg { stroke-width: 3.5; }
 .empty { color: var(--muted); padding: 30px 0; text-align: center; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { text-align: left; font-weight: 600; font-size: 12px; color: var(--ink-2); border-bottom: 1px solid var(--axis); padding: 8px 8px; cursor: pointer; white-space: nowrap; user-select: none; }
-th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
+th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 td { border-bottom: 1px solid var(--grid); padding: 8px 8px; vertical-align: top; }
 tr.row { cursor: pointer; }
 tr.row:hover td { background: var(--surface-2); }
@@ -132,6 +132,9 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 20px
     <label>Art
       <select id="f-kind"><option value="Biete">Biete</option><option value="">alle</option><option value="Suche">Suche</option><option value="Charter">Charter</option></select>
     </label>
+    <label>Antrieb
+      <select id="f-an"><option value="">alle</option><option>Segelflugzeug</option><option>Turbo</option><option>Eigenstarter</option></select>
+    </label>
     <label>Status
       <select id="f-active"><option value="1">aktuell online</option><option value="">inkl. verkauft/entfernt</option><option value="0">nur verkauft/entfernt</option></select>
     </label>
@@ -173,7 +176,7 @@ const DAY = 864e5;
 
 let DATA = [], state = { sort: "pe", dir: 1, tab: "list", open: null };
 const $ = id => document.getElementById(id);
-const F = ["f-muster", "f-q", "f-src", "f-kind", "f-active", "f-pmin", "f-pmax", "f-ymin", "f-alarm"];
+const F = ["f-muster", "f-q", "f-src", "f-kind", "f-an", "f-active", "f-pmin", "f-pmax", "f-ymin", "f-alarm"];
 
 async function load() {
   try {
@@ -229,12 +232,12 @@ function writeHash() {
 }
 
 function filtered(ignoreActive = false) {
-  const m = norm($("f-muster").value), q = norm($("f-q").value), src = $("f-src").value, kind = $("f-kind").value;
+  const m = norm($("f-muster").value), q = norm($("f-q").value), src = $("f-src").value, kind = $("f-kind").value, an = $("f-an").value;
   const act = $("f-active").value, pmin = +$("f-pmin").value || 0, pmax = +$("f-pmax").value || Infinity, ymin = +$("f-ymin").value || 0;
   const alarm = $("f-alarm").checked;
   return DATA.filter(x =>
     (!m || norm(x.m) === m || (!DATA.some(y => norm(y.m) === m) && norm(x.m).includes(m))) &&
-    (!q || x.hay.includes(q)) && (!src || x.s === src) && (!kind || x.k === kind) &&
+    (!q || x.hay.includes(q)) && (!src || x.s === src) && (!kind || x.k === kind) && (!an || x.an === an) &&
     (ignoreActive || act === "" || String(x.a) === act) &&
     (pmin === 0 && pmax === Infinity || (x.pe != null && x.pe >= pmin && x.pe <= pmax)) &&
     (!ymin || (x.y && x.y >= ymin)) && (!alarm || x.al));
@@ -330,7 +333,7 @@ function renderChart(rows) {
     g.addEventListener("mousemove", ev => {
       const r = box.getBoundingClientRect(), x = l.x;
       tip.innerHTML = `<b>${esc(x.t)}</b><div>${fmtEur(x.pe)}${x.delta ? ` <span class="${x.delta < 0 ? "down" : "up"}">(${x.delta < 0 ? "▼" : "▲"} ${fmtEur(Math.abs(x.delta))})</span>` : ""}</div>
-        <div class="m">${esc(x.m || "?")} · ${x.y || "Bj. ?"} · ${esc(x.s)}</div><div class="m">online ${fmtDate(x.start)} – ${x.end ? fmtDate(x.end) + " (entfernt)" : "heute"}</div>${x.al ? `<div class="m" style="color:var(--critical)">🚨 ${esc(x.al)}</div>` : ""}`;
+        <div class="m">${esc(x.m || "?")} · ${esc(x.an || "")} · ${x.y || "Bj. ?"} · ${esc(x.s)}</div><div class="m">online ${fmtDate(x.start)} – ${x.end ? fmtDate(x.end) + " (entfernt)" : "heute"}</div>${x.al ? `<div class="m" style="color:var(--critical)">🚨 ${esc(x.al)}</div>` : ""}`;
       tip.style.display = "block";
       const tx = ev.clientX - r.left + 14;
       tip.style.left = Math.min(tx, r.width - tip.offsetWidth - 4) + "px";
@@ -351,7 +354,7 @@ function monthTicks(x0, x1, W) {
 }
 
 const COLS = [
-  ["m", "Muster"], ["t", "Inserat"], ["pe", "Preis", "r"], ["y", "Bj.", "r"], ["hr", "Std.", "r hide-m"],
+  ["m", "Muster"], ["an", "Antrieb", "hide-m"], ["t", "Inserat"], ["pe", "Preis", "r"], ["y", "Bj.", "r"], ["hr", "Std.", "r hide-m"],
   ["l", "Ort", "hide-m"], ["s", "Plattform", "hide-m"], ["start", "online seit", "r hide-m"],
 ];
 function renderTable(rows) {
@@ -366,6 +369,7 @@ function renderTable(rows) {
   rows.forEach(x => {
     h += `<tr class="row${x.a ? "" : " removed"}" data-id="${esc(x.id)}">
       <td>${esc(x.m || "–")}</td>
+      <td class="hide-m">${esc(x.an || "–")}</td>
       <td>${esc(x.t)}${x.al ? `<span class="badge b-alarm" title="${esc(x.al)}">🚨 ${esc(x.al.split(",")[0])}</span>` : ""}${x.isNew ? '<span class="badge b-new">neu</span>' : ""}${x.k !== "Biete" ? `<span class="badge b-kind">${esc(x.k)}</span>` : ""}${x.a ? "" : `<span class="badge b-gone">entfernt ${fmtDate(x.rm)}</span>`}</td>
       <td class="r">${x.pe != null ? fmtEur(x.pe) : esc(x.pt || "–")}${x.c && x.c !== "EUR" && x.pe ? `<div class="m" style="font-size:11px;color:var(--muted)">${esc(x.pt)}</div>` : ""}${x.delta ? `<div class="${x.delta < 0 ? "down" : "up"}">${x.delta < 0 ? "▼" : "▲"} ${fmtEur(Math.abs(x.delta))}</div>` : ""}</td>
       <td class="r">${x.y || "–"}</td>

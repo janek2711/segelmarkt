@@ -70,6 +70,9 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(listings)")}
+    if "antrieb" not in cols:  # Erweiterung: Segelflugzeug / Turbo / Eigenstarter
+        con.execute("ALTER TABLE listings ADD COLUMN antrieb TEXT")
     return con
 
 
@@ -83,7 +86,7 @@ def source_count(con, source: str) -> int:
 
 def insert(con, item: dict, ts: str) -> None:
     cols = [
-        "id", "source", "ext_id", "url", "title", "kind", "muster", "hersteller", "price", "currency",
+        "id", "source", "ext_id", "url", "title", "kind", "muster", "antrieb", "hersteller", "price", "currency",
         "price_eur", "price_text", "year", "hours", "location", "image", "snippet", "description",
         "details", "published", "detail_fetched", "alarm", "alarm_terms",
     ]
