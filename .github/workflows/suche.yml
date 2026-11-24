@@ -1,4 +1,4 @@
-name: Segelmarkt-Suche
+name: Segelflugmarkt-Suche
 
 on:
   schedule:
@@ -39,8 +39,8 @@ jobs:
 
       - name: Datenbank speichern
         run: |
-          git config user.name "segelmarkt-bot"
-          git config user.email "segelmarkt-bot@users.noreply.github.com"
+          git config user.name "segelflugmarkt-bot"
+          git config user.email "segelflugmarkt-bot@users.noreply.github.com"
           git add data/segelmarkt.db docs/data.json
           git diff --cached --quiet || git commit -m "Suchlauf $(date -u +'%Y-%m-%d %H:%M') UTC"
           git push

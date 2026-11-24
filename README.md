@@ -1,4 +1,4 @@
-# 🛩️ Segelmarkt Monitor
+# 🛩️ Segelflugmarkt Monitor
 
 Durchsucht **segelflug.de**, **flugzeugmarkt.de** (Segelflugzeuge + Motorsegler) und **soaringmarket.eu**
 automatisch nach Inseraten. Alles landet in einer Datenbank mit Preisverlauf. Neue Inserate kommen als
@@ -33,7 +33,7 @@ GitHub Actions (stündlich)  ──►  Scraper (Python)  ──►  data/segelm
    - `DASHBOARD_URL` = `https://<dein-name>.github.io/segelmarkt/`. Dann hat jede Push-Nachricht einen „Dashboard“-Knopf.
 5. **Settings → Pages**: Source = *Deploy from a branch*, Branch = `main`, Ordner = `/docs` → Save.
 6. **Settings → Actions → General → Workflow permissions**: *Read and write permissions* → Save.
-7. **Actions → Segelmarkt-Suche → Run workflow**, um den ersten Lauf sofort zu starten.
+7. **Actions → Segelflugmarkt-Suche → Run workflow**, um den ersten Lauf sofort zu starten.
 
 Danach läuft die Suche von 6 bis 23 Uhr stündlich, nachts alle 3 Stunden.
 

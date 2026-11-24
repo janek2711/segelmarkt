@@ -164,7 +164,7 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
         if seed_alarms:
             msg += "\n\nBereits vorhanden mit Alarm-Begriff:\n" + "\n".join(
                 f"• {a.get('muster') or '?'}: {a['title'][:60]} ({a.get('alarm_terms')})" for a in seed_alarms[:15])
-        notify.send(f"Segelmarkt: {name} eingerichtet", msg, priority=4 if seed_alarms else 2,
+        notify.send(f"Segelflugmarkt: {name} eingerichtet", msg, priority=4 if seed_alarms else 2,
                     tags=["white_check_mark"], click=notify.DASHBOARD_URL or None, dry_run=args.dry_run)
 
 

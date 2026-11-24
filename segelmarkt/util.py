@@ -14,7 +14,7 @@ CONFIG_PATH = ROOT / "config.json"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/130 Safari/537.36 SegelmarktMonitor/1.0 (privat)"
+    "(KHTML, like Gecko) Chrome/130 Safari/537.36 SegelflugmarktMonitor/1.0 (privat)"
 )
 
 # Grobe Umrechnungskurse nur fuer den Preisvergleich im Dashboard.
