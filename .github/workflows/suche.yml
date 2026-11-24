@@ -1,0 +1,46 @@
+name: Segelmarkt-Suche
+
+on:
+  schedule:
+    # stündlich zwischen 6 und 23 Uhr (UTC+1), nachts alle 3 Stunden
+    - cron: "23 5-22 * * *"
+    - cron: "23 1,4 * * *"
+  workflow_dispatch: {}   # manuell starten über "Run workflow"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: suche
+  cancel-in-progress: false
+
+jobs:
+  suche:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Plattformen durchsuchen
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+          NTFY_CALL: ${{ secrets.NTFY_CALL }}
+          NTFY_SERVER: ${{ vars.NTFY_SERVER }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+        run: python -m segelmarkt.run
+
+      - name: Datenbank speichern
+        run: |
+          git config user.name "segelmarkt-bot"
+          git config user.email "segelmarkt-bot@users.noreply.github.com"
+          git add data/segelmarkt.db docs/data.json
+          git diff --cached --quiet || git commit -m "Suchlauf $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git push

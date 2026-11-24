@@ -1,0 +1,18 @@
+{
+  "alarm_begriffe": ["bruch", "projekt", "project", "unfall", "damaged"],
+  "beobachtete_muster": [],
+  "benachrichtigen_bei": {
+    "neues_inserat": true,
+    "preisaenderung": true,
+    "nur_biete": true
+  },
+  "anruf_bei_alarm": false,
+  "quellen": {
+    "segelflug.de": true,
+    "flugzeugmarkt.de": true,
+    "soaringmarket.eu": true
+  },
+  "flugzeugmarkt_kategorien": ["segelflugzeuge", "motorsegler"],
+  "pause_zwischen_abrufen_sekunden": 1.5,
+  "max_detailabrufe_pro_lauf": 400
+}
