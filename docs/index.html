@@ -185,7 +185,7 @@ async function load() {
     DATA = j.listings.map(prep);
     $("upd").textContent = "Stand: " + new Date(j.generated).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
     $("status").innerHTML = Object.entries(j.runs || {}).map(([s, v]) =>
-      `<span class="${v.ok ? "" : "bad"}" title="${esc(v.error || "")}">${v.ok ? "✓" : "⚠"} ${esc(s)}${v.ok ? "" : " – Fehler, letzter Erfolg " + fmtDate(v.last_ok)}</span>`).join("");
+      `<span class="${v.ok && !v.error ? "" : "bad"}" title="${esc(v.error || "")}">${v.ok && !v.error ? "✓" : "⚠"} ${esc(s)}${v.ok ? (v.error ? " – " + esc(v.error) : "") : " – Fehler, letzter Erfolg " + fmtDate(v.last_ok)}</span>`).join("");
     initFilters();
     readHash();
     render();

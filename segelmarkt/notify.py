@@ -12,7 +12,7 @@ import os
 
 import requests
 
-DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "")
+DASHBOARD_URL = (os.environ.get("DASHBOARD_URL") or "").strip()
 
 
 def _fmt_price(item: dict) -> str:
@@ -42,7 +42,8 @@ def send(title: str, message: str, *, priority: int = 3, tags: list[str] | None 
     headers = {}
     if os.environ.get("NTFY_TOKEN"):
         headers["Authorization"] = f"Bearer {os.environ['NTFY_TOKEN']}"
-    server = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+    # GitHub uebergibt nicht gesetzte Variablen als leeren Text -> dann Standardserver
+    server = (os.environ.get("NTFY_SERVER") or "https://ntfy.sh").strip().rstrip("/")
     try:
         r = requests.post(server, json=payload, headers=headers, timeout=20)
         if r.status_code >= 400 and "call" in payload:

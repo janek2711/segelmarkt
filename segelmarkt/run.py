@@ -85,7 +85,7 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
         return
 
     seeding = db.source_count(con, name) == 0
-    new = changed = 0
+    new = changed = push_fail = 0
     seed_alarms: list[dict] = []
     seen: set[str] = set()
 
@@ -114,8 +114,10 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
                 if hits and wants_push(it, cfg):
                     seed_alarms.append(it)
             elif wants_push(it, cfg) and (hits or cfg["benachrichtigen_bei"].get("neues_inserat", True)):
-                notify.new_listing(it, hits, cfg, dry_run=args.dry_run, watched=is_watched(it, cfg))
-                db.update(con, lid, {"notified": 2 if hits else 1})
+                if notify.new_listing(it, hits, cfg, dry_run=args.dry_run, watched=is_watched(it, cfg)) or args.dry_run:
+                    db.update(con, lid, {"notified": 2 if hits else 1})
+                else:
+                    push_fail += 1  # bleibt notified=0 -> wird im naechsten Lauf erneut versucht
             continue
 
         # ---------- bekanntes Inserat
@@ -131,11 +133,23 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
             changed += 1
             full = {**dict(row), **upd}
             print(f"  PREIS {row['price']:.0f} -> {it['price']:.0f}  {row['title'][:60]}")
-            if cfg["benachrichtigen_bei"].get("preisaenderung", True) and wants_push(full, cfg):
+            # Korrektur eines Platzhalter-/Tippfehlerpreises (z. B. 275 -> 275.000) ist keine echte Preisaenderung
+            correction = min(row["price"], it["price"]) < 200 or max(row["price"], it["price"]) / max(min(row["price"], it["price"]), 1) > 20
+            if cfg["benachrichtigen_bei"].get("preisaenderung", True) and wants_push(full, cfg) and not correction:
                 notify.price_change(full, row["price"], cfg, dry_run=args.dry_run)
         elif it.get("price") is not None and row["price"] is None:
             upd.update(price=it["price"], price_text=it.get("price_text"),
                        price_eur=price_eur(it["price"], it.get("currency") or "EUR"))
+
+        # Push nachholen, falls er beim Fund fehlgeschlagen ist (nur fuer Inserate der letzten 3 Tage)
+        if (row["notified"] == 0 and not args.dry_run and row["first_seen"] >= _days_ago(3)
+                and wants_push(dict(row), cfg) and (row["alarm"] or cfg["benachrichtigen_bei"].get("neues_inserat", True))):
+            full = {**dict(row), **upd}
+            terms_hit = [t.strip() for t in (row["alarm_terms"] or "").split(",") if t.strip()]
+            if notify.new_listing(full, terms_hit, cfg, watched=is_watched(full, cfg)):
+                upd["notified"] = 2 if terms_hit else 1
+            else:
+                push_fail += 1
 
         # Detailseite nachholen, falls beim ersten Mal das Limit erreicht war
         if not row["detail_fetched"] and budget[0] > 0:
@@ -162,7 +176,10 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
     for lid in gone:
         db.update(con, lid, {"active": 0, "removed_at": ts})
     print(f"  {len(items)} gefunden, {new} neu, {changed} Preisänderungen, {len(gone)} entfernt")
-    db.log_run(con, ts, name, True, len(items), new, changed, len(gone))
+    if push_fail:
+        print(f"  WARNUNG: {push_fail} Push-Nachrichten fehlgeschlagen")
+    db.log_run(con, ts, name, True, len(items), new, changed, len(gone),
+               error=f"{push_fail} Push-Nachrichten fehlgeschlagen" if push_fail else None)
     con.commit()
 
     if seeding:
@@ -172,6 +189,11 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
                 f"• {a.get('muster') or '?'}: {a['title'][:60]} ({a.get('alarm_terms')})" for a in seed_alarms[:15])
         notify.send(f"Segelflugmarkt: {name} eingerichtet", msg, priority=4 if seed_alarms else 2,
                     tags=["white_check_mark"], click=notify.DASHBOARD_URL or None, dry_run=args.dry_run)
+
+
+def _days_ago(n: int) -> str:
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(days=n)).replace(microsecond=0).isoformat()
 
 
 def reclassify_all(con, terms: list[str]) -> None:
