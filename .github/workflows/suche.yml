@@ -5,7 +5,12 @@ on:
     # stündlich zwischen 6 und 23 Uhr (UTC+1), nachts alle 3 Stunden
     - cron: "23 5-22 * * *"
     - cron: "23 1,4 * * *"
-  workflow_dispatch: {}   # manuell starten über "Run workflow"
+  workflow_dispatch:      # manuell starten über "Run workflow"
+    inputs:
+      nur_testnachricht:
+        description: "Nur eine Test-Push-Nachricht senden (keine Suche)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -35,7 +40,7 @@ jobs:
           NTFY_CALL: ${{ secrets.NTFY_CALL }}
           NTFY_SERVER: ${{ vars.NTFY_SERVER }}
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
-        run: python -m segelmarkt.run
+        run: python -m segelmarkt.run ${{ inputs.nur_testnachricht && '--test-push' || '' }}
 
       - name: Datenbank speichern
         run: |

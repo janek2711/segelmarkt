@@ -87,6 +87,7 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
     seeding = db.source_count(con, name) == 0
     new = changed = push_fail = 0
     seed_alarms: list[dict] = []
+    retry: list[dict] = []  # Inserate, deren Push noch aussteht
     seen: set[str] = set()
 
     for it in items:
@@ -144,12 +145,7 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
         # Push nachholen, falls er beim Fund fehlgeschlagen ist (nur fuer Inserate der letzten 3 Tage)
         if (row["notified"] == 0 and not args.dry_run and row["first_seen"] >= _days_ago(3)
                 and wants_push(dict(row), cfg) and (row["alarm"] or cfg["benachrichtigen_bei"].get("neues_inserat", True))):
-            full = {**dict(row), **upd}
-            terms_hit = [t.strip() for t in (row["alarm_terms"] or "").split(",") if t.strip()]
-            if notify.new_listing(full, terms_hit, cfg, watched=is_watched(full, cfg)):
-                upd["notified"] = 2 if terms_hit else 1
-            else:
-                push_fail += 1
+            retry.append({**dict(row), **upd})
 
         # Detailseite nachholen, falls beim ersten Mal das Limit erreicht war
         if not row["detail_fetched"] and budget[0] > 0:
@@ -170,6 +166,25 @@ def run_source(con, http, mod, cfg, args, budget: list[int]) -> None:
             except Exception as e:
                 print(f"  Detailseite fehlgeschlagen ({it['url']}): {e}")
         db.update(con, lid, upd)
+
+    # ausstehende Pushes nachholen: Alarme einzeln, sonst bis 3 einzeln, darueber eine Sammelnachricht
+    if retry:
+        alarms = [r for r in retry if r.get("alarm")]
+        normal = [r for r in retry if not r.get("alarm")]
+        for r in alarms + (normal if len(normal) <= 3 else []):
+            terms_hit = [t.strip() for t in (r.get("alarm_terms") or "").split(",") if t.strip()]
+            if notify.new_listing(r, terms_hit, cfg, watched=is_watched(r, cfg)):
+                db.update(con, r["id"], {"notified": 2 if terms_hit else 1})
+            else:
+                push_fail += 1
+        if len(normal) > 3:
+            lines = [f"• {r.get('muster') or '?'} – {notify._fmt_price(r)}: {(r.get('title') or '')[:50]}" for r in normal[:20]]
+            if notify.send(f"{len(normal)} neue Inserate auf {name}", "\n".join(lines), priority=3, tags=["airplane"],
+                           click=notify.DASHBOARD_URL or normal[0]["url"]):
+                for r in normal:
+                    db.update(con, r["id"], {"notified": 1})
+            else:
+                push_fail += 1
 
     # nicht mehr gelistete Inserate als entfernt markieren (verkauft / geloescht)
     gone = [r["id"] for r in con.execute("SELECT id FROM listings WHERE source = ? AND active = 1", (name,)) if r["id"] not in seen]
@@ -215,7 +230,14 @@ def main(argv=None) -> int:
     ap.add_argument("--only", help="nur diese Plattform, z. B. segelflug.de")
     ap.add_argument("--max-details", type=int, help="max. Detailseiten pro Lauf")
     ap.add_argument("--no-export", action="store_true")
+    ap.add_argument("--test-push", action="store_true", help="nur eine Testnachricht senden")
     args = ap.parse_args(argv)
+    if args.test_push:
+        ok = notify.send("Segelflugmarkt Monitor: Test aus der Cloud",
+                         "Diese Nachricht kommt direkt aus GitHub Actions. Neue Inserate und Alarme erreichen dich.",
+                         priority=4, tags=["airplane", "white_check_mark"], click=notify.DASHBOARD_URL or None)
+        print("Testnachricht gesendet" if ok else "Testnachricht FEHLGESCHLAGEN")
+        return 0 if ok else 1
 
     cfg = load_config()
     con = db.connect()
